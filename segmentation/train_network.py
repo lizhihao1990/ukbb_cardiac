@@ -28,15 +28,15 @@ tf.app.flags.DEFINE_integer('train_iteration', 50000, 'Number of training iterat
 tf.app.flags.DEFINE_integer('num_filter', 16, 'Number of filters for the first convolution layer.')
 tf.app.flags.DEFINE_integer('num_level', 5, 'Number of network levels.')
 tf.app.flags.DEFINE_float('learning_rate', 1e-3, 'Learning rate.')
-tf.app.flags._global_parser.add_argument('--seq_name', choices=['sa', 'la_2ch', 'la_4ch'],
+tf.app.flags._global_parser.add_argument('--seq_name', choices=['sa', 'la_2ch', 'la_4ch', 'ao'],
                                          default='sa', help='Sequence name for training.')
 tf.app.flags._global_parser.add_argument('--model', choices=['FCN', 'ResNet'],
                                          default='FCN', help='Model name.')
 tf.app.flags._global_parser.add_argument('--optimizer', choices=['Adam', 'SGD', 'Momentum'],
                                          default='Adam', help='Optimizer.')
 tf.app.flags.DEFINE_string('dataset_dir', '/vol/medic02/users/wbai/data/cardiac_atlas/UKBB_2964/sa',
-                           'Path to the dataset directory, which is split into training, validation '
-                           'and test subdirectories.')
+                           'Path to the dataset directory, which is split into training and validation '
+                           'subdirectories.')
 tf.app.flags.DEFINE_string('log_dir', '/vol/bitbucket/wbai/ukbb_cardiac/log',
                            'Directory for saving the log file.')
 tf.app.flags.DEFINE_string('checkpoint_dir', '/vol/bitbucket/wbai/ukbb_cardiac/model',
@@ -107,13 +107,12 @@ def get_random_batch(filename_list, batch_size, image_size=192, data_augmentatio
 
 def main(argv=None):
     """ Main function """
-    # Go through each subset (training, validation, test) under the data directory
+    # Go through each subset (training, validation) under the data directory
     # and list the file names of the subjects
     data_list = {}
-    for k in ['train', 'validation', 'test']:
+    for k in ['train', 'validation']:
         subset_dir = os.path.join(FLAGS.dataset_dir, k)
         data_list[k] = []
-
         for data in sorted(os.listdir(subset_dir)):
             data_dir = os.path.join(subset_dir, data)
             # Check the existence of the image and label map at ED and ES time frames
@@ -152,6 +151,10 @@ def main(argv=None):
     elif FLAGS.seq_name == 'la_4ch':
         # la_4ch, long-axis 4 chamber views
         # 3 classes (background, LA cavity, RA cavity)
+        n_class = 3
+    elif FLAGS.seq_name == 'ao':
+        # ao, aortic distensibility images
+        # 3 classes (background, ascending aorta, descending aorta)
         n_class = 3
     else:
         print('Error: unknown seq_name {0}.'.format(FLAGS.seq_name))
@@ -203,6 +206,8 @@ def main(argv=None):
     dice_rv = tf_categorical_dice(pred, label_pl, 3)
     dice_la = tf_categorical_dice(pred, label_pl, 1)
     dice_ra = tf_categorical_dice(pred, label_pl, 2)
+    dice_aa = tf_categorical_dice(pred, label_pl, 1)
+    dice_da = tf_categorical_dice(pred, label_pl, 2)
 
     # Optimiser
     lr = FLAGS.learning_rate
@@ -244,6 +249,8 @@ def main(argv=None):
         f_log.write('iteration,time,train_loss,train_acc,test_loss,test_acc,test_dice_la\n')
     elif FLAGS.seq_name == 'la_4ch':
         f_log.write('iteration,time,train_loss,train_acc,test_loss,test_acc,test_dice_la,test_dice_ra\n')
+    elif FLAGS.seq_name == 'ao':
+        f_log.write('iteration,time,train_loss,train_acc,test_loss,test_acc,test_dice_aa,test_dice_da\n')
 
     # Start the tensorflow session
     with tf.Session() as sess:
@@ -305,6 +312,10 @@ def main(argv=None):
                     validation_loss, validation_acc, validation_dice_la, validation_dice_ra = \
                         sess.run([loss, accuracy, dice_la, dice_ra],
                                  {image_pl: images, label_pl: labels, training_pl: False})
+                elif FLAGS.seq_name == 'ao':
+                    validation_loss, validation_acc, validation_dice_aa, validation_dice_da = \
+                        sess.run([loss, accuracy, dice_aa, dice_da],
+                                 {image_pl: images, label_pl: labels, training_pl: False})
 
                 summary = tf.Summary()
                 summary.value.add(tag='loss', simple_value=validation_loss)
@@ -318,6 +329,9 @@ def main(argv=None):
                 elif FLAGS.seq_name == 'la_4ch':
                     summary.value.add(tag='dice_la', simple_value=validation_dice_la)
                     summary.value.add(tag='dice_ra', simple_value=validation_dice_ra)
+                elif FLAGS.seq_name == 'ao':
+                    summary.value.add(tag='dice_aa', simple_value=validation_dice_aa)
+                    summary.value.add(tag='dice_da', simple_value=validation_dice_da)
                 validation_writer.add_summary(summary, iteration)
 
                 # Print the results for this iteration
@@ -336,6 +350,9 @@ def main(argv=None):
                 elif FLAGS.seq_name == 'la_4ch':
                     print('  validation Dice LA:\t\t{:.6f}'.format(validation_dice_la))
                     print('  validation Dice RA:\t\t{:.6f}'.format(validation_dice_ra))
+                elif FLAGS.seq_name == 'ao':
+                    print('  validation Dice AA:\t\t{:.6f}'.format(validation_dice_aa))
+                    print('  validation Dice DA:\t\t{:.6f}'.format(validation_dice_da))
 
                 # Log
                 if FLAGS.seq_name == 'sa':
@@ -350,6 +367,10 @@ def main(argv=None):
                     f_log.write('{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}\n'.format(
                         iteration, time.time() - start_time, train_loss, train_acc, validation_loss,
                         validation_acc, validation_dice_la, validation_dice_ra))
+                elif FLAGS.seq_name == 'ao':
+                    f_log.write('{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}\n'.format(
+                        iteration, time.time() - start_time, train_loss, train_acc, validation_loss,
+                        validation_acc, validation_dice_aa, validation_dice_da))
                 f_log.flush()
             else:
                 # Print the results for this iteration
