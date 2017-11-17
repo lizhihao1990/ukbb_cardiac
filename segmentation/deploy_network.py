@@ -20,7 +20,7 @@ from image_utils import *
 
 """ Deployment parameters """
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags._global_parser.add_argument('--seq_name', choices=['sa', 'la_2ch', 'la_4ch'],
+tf.app.flags._global_parser.add_argument('--seq_name', choices=['sa', 'la_2ch', 'la_4ch', 'ao'],
                                          default='sa', help="Sequence name.")
 tf.app.flags.DEFINE_string('test_dir', '/vol/biomedic2/wbai/tmp/github/test',
                            'Path to the test set directory, under which images are organised in '
@@ -109,13 +109,14 @@ if __name__ == '__main__':
 
                 # ED frame defaults to be the first time frame.
                 # Determine ES frame according to the minimum LV volume.
-                k = {}
-                k['ED'] = 0
-                if FLAGS.seq_name == 'sa':
-                    k['ES'] = np.argmin(np.sum(pred == 1, axis=(0, 1, 2)))
-                else:
-                    k['ES'] = np.argmax(np.sum(pred == 1, axis=(0, 1, 2)))
-                print('  ED frame = {:d}, ES frame = {:d}'.format(k['ED'], k['ES']))
+                if FLAGS.seq_name == 'sa' or FLAGS.seq_name == 'la_2ch' or FLAGS.seq_name == 'la_4ch':
+                    k = {}
+                    k['ED'] = 0
+                    if FLAGS.seq_name == 'sa':
+                        k['ES'] = np.argmin(np.sum(pred == 1, axis=(0, 1, 2)))
+                    else:
+                        k['ES'] = np.argmax(np.sum(pred == 1, axis=(0, 1, 2)))
+                    print('  ED frame = {:d}, ES frame = {:d}'.format(k['ED'], k['ES']))
 
                 # Save the segmentation
                 if FLAGS.save_seg:
@@ -128,11 +129,12 @@ if __name__ == '__main__':
                     nim2.header['pixdim'] = nim.header['pixdim']
                     nib.save(nim2, '{0}/seg_{1}.nii.gz'.format(dest_data_dir, FLAGS.seq_name))
 
-                    for fr in ['ED', 'ES']:
-                        nib.save(nib.Nifti1Image(orig_image[:, :, :, k[fr]], nim.affine),
-                                 '{0}/{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr))
-                        nib.save(nib.Nifti1Image(pred[:, :, :, k[fr]], nim.affine),
-                                 '{0}/seg_{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr))
+                    if FLAGS.seq_name == 'sa' or FLAGS.seq_name == 'la_2ch' or FLAGS.seq_name == 'la_4ch':
+                        for fr in ['ED', 'ES']:
+                            nib.save(nib.Nifti1Image(orig_image[:, :, :, k[fr]], nim.affine),
+                                     '{0}/{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr))
+                            nib.save(nib.Nifti1Image(pred[:, :, :, k[fr]], nim.affine),
+                                     '{0}/seg_{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr))
 
                 # Evaluate the clinical measures
                 if FLAGS.seq_name == 'sa' and FLAGS.clinical_measure:
