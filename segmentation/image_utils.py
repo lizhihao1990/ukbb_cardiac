@@ -54,10 +54,21 @@ def crop_image(image, cx, cy, size):
 def rescale_intensity(image, thres=(1.0, 99.0)):
     """ Rescale the image intensity to the range of [0, 1] """
     val_l, val_h = np.percentile(image, thres)
-    image2 = image
+    image2 = np.copy(image)
     image2[image < val_l] = val_l
     image2[image > val_h] = val_h
     image2 = (image2.astype(np.float32) - val_l) / (val_h - val_l)
+    return image2
+
+
+def normalise_intensity(image, thres_roi=10.0):
+    """ Normalise the image intensity by the mean and standard deviation """
+    val_l = np.percentile(image, thres_roi)
+    roi = (image >= val_l)
+    mu = np.mean(image[roi])
+    sigma = np.std(image[roi])
+    eps = 1e-6
+    image2 = (image - mu) / (sigma + eps)
     return image2
 
 

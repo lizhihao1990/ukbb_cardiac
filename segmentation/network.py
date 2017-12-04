@@ -25,6 +25,15 @@ def conv2d_bn_relu(x, filters, training, kernel_size=3, strides=1):
     return x_relu
 
 
+def conv2d_transpose_bn_relu(x, filters, training, kernel_size=3, strides=1):
+    """ Basic Conv2D_Transpose + BN + ReLU unit """
+    x_conv = tf.layers.conv2d_transpose(x, filters=filters, kernel_size=kernel_size, strides=strides,
+                                        padding='same', use_bias=False)
+    x_bn = tf.layers.batch_normalization(x_conv, training=training)
+    x_relu = tf.nn.relu(x_bn)
+    return x_relu
+
+
 def residual_unit(x, filters, training, strides=1):
     """
         Basic residual learning unit, which implements the unit illustrated by Figure 1(b) in
@@ -273,4 +282,46 @@ def build_ResNet(image, n_class, n_level, n_filter, n_block, training,
         x = conv2d_bn_relu(x, filters=fc, training=training, kernel_size=1)
         x = conv2d_bn_relu(x, filters=fc, training=training, kernel_size=1)
         logits = tf.layers.conv2d(x, filters=n_class, kernel_size=1, padding='same')
+    return logits
+
+
+def build_UNet(image, n_class, n_level, n_filter, n_block, training):
+    """
+        Build a U-Net for segmenting an input image
+        into n_class classes and return the logits map.
+        """
+    net = {}
+    x = image
+
+    # Downsampling or analysis path
+    # Learn fine-to-coarse features at each resolution level
+    for l in range(0, n_level):
+        with tf.name_scope('conv{}'.format(l)):
+            # If this is the first level (l = 0), keep the resolution.
+            # Otherwise, convolve with a stride of 2, i.e. downsample by a factor of 2
+            strides = 1 if l == 0 else 2
+            # For each resolution level, perform n_block[l] times convolutions
+            x = conv2d_bn_relu(x, filters=n_filter[l], training=training, kernel_size=3, strides=strides)
+            for i in range(1, n_block[l]):
+                x = conv2d_bn_relu(x, filters=n_filter[l], training=training, kernel_size=3)
+            net['conv{}'.format(l)] = x
+
+    # Upsampling or synthesis path
+    net['conv{}_up'.format(n_level - 1)] = net['conv{}'.format(n_level - 1)]
+    for l in range(n_level - 2, -1, -1):
+        with tf.name_scope('conv{}_up'.format(l)):
+            x = conv2d_transpose_bn_relu(net['conv{}_up'.format(l + 1)], filters=n_filter[l],
+                                         training=training, kernel_size=3, strides=2)
+            x = tf.concat([net['conv{}'.format(l)], x], axis=-1)
+            for i in range(0, n_block[l]):
+                x = conv2d_bn_relu(x, filters=n_filter[l], training=training, kernel_size=3)
+            net['conv{}_up'.format(l)] = x
+
+    # Perform prediction
+    with tf.name_scope('out'):
+        # We only calculate logits, instead of softmax here because the loss function
+        # tf.nn.softmax_cross_entropy() accepts the unscaled logits and performs softmax
+        # internally for efficiency and numerical stability reasons.
+        # Refer to https://github.com/tensorflow/tensorflow/issues/2462
+        logits = tf.layers.conv2d(net['conv0_up'], filters=n_class, kernel_size=1, padding='same')
     return logits

@@ -21,6 +21,8 @@ from image_utils import *
 
 """ Training parameters """
 FLAGS = tf.app.flags.FLAGS
+# NOTE: use image_size = 256 for aortic images to learn the boundary.
+# Otherwise, the boundary may be misunderstood as the aorta.
 tf.app.flags.DEFINE_integer('image_size', 192, 'Image size after cropping.')
 tf.app.flags.DEFINE_integer('train_batch_size', 2, 'Number of images for each training batch.')
 tf.app.flags.DEFINE_integer('validation_batch_size', 2, 'Number of images for each validation batch.')
@@ -41,6 +43,8 @@ tf.app.flags.DEFINE_string('log_dir', '/vol/bitbucket/wbai/ukbb_cardiac/log',
                            'Directory for saving the log file.')
 tf.app.flags.DEFINE_string('checkpoint_dir', '/vol/bitbucket/wbai/ukbb_cardiac/model',
                            'Directory for saving the trained model.')
+tf.app.flags.DEFINE_boolean('z_score', True, 'Normalise the image intensity to z-score. '
+                                             'Otherwise, rescale the intensity.')
 
 
 def get_random_batch(filename_list, batch_size, image_size=192, data_augmentation=False,
@@ -77,8 +81,11 @@ def get_random_batch(filename_list, batch_size, image_size=192, data_augmentatio
             image = crop_image(image, cx, cy, image_size)
             label = crop_image(label, cx, cy, image_size)
 
-            # Intensity rescaling
-            image = rescale_intensity(image, (1.0, 99.0))
+            # Intensity normalisation
+            if FLAGS.z_score:
+                image = normalise_intensity(image, 1.0)
+            else:
+                image = rescale_intensity(image, (1.0, 99.0))
 
             # Append the image slices to the batch
             # Use list for appending, which is much faster than numpy array
@@ -234,6 +241,8 @@ def main(argv=None):
     model_name = '{0}_{1}_level{2}_filter{3}_{4}_{5}_batch{6}_iter{7}_lr{8}'.format(
         FLAGS.model, FLAGS.seq_name, n_level, n_filter[0], ''.join([str(x) for x in n_block]),
         FLAGS.optimizer, FLAGS.train_batch_size, FLAGS.train_iteration, FLAGS.learning_rate)
+    if FLAGS.z_score:
+        model_name += '_zscore'
     model_dir = os.path.join(FLAGS.checkpoint_dir, model_name)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
