@@ -168,20 +168,18 @@ def main(argv=None):
 
     # Prepare tensors for the image and label map pairs
     # Use int32 for label_pl as tf.one_hot uses int32
+    # image_pl: NTXYC
+    # label_pl: NTXY
     image_pl = tf.placeholder(tf.float32, shape=[None, None, None, None, 1], name='image')
     label_pl = tf.placeholder(tf.int32, shape=[None, None, None], name='label')
 
-    # Print out the placeholders' names, which will be useful when deploying the network
-    print('Placeholder image_pl.name = ' + image_pl.name)
-    print('Placeholder label_pl.name = ' + label_pl.name)
-
     # Placeholder for the training phase
-    # This flag is important for the batch_normalization layer to function properly.
+    # This flag is important for the batch_normalization layer to function
+    # properly.
     training_pl = tf.placeholder(tf.bool, shape=[], name='training')
-    print('Placeholder training_pl.name = ' + training_pl.name)
 
-    # Determine the number of label classes according to the manual annotation procedure
-    # for each image sequence.
+    # Determine the number of label classes according to the manual annotation
+    # procedure for each image sequence.
     n_class = 0
     if FLAGS.seq_name == 'ao':
         # ao, aortic distensibility images
@@ -191,13 +189,10 @@ def main(argv=None):
         print('Error: unknown seq_name {0}.'.format(FLAGS.seq_name))
         exit(0)
 
-    # The number of resolution levels
-    n_level = FLAGS.num_level
-
     # The number of filters at each resolution level
     # Follow the VGG philosophy, increasing the dimension by a factor of 2 for each level
     n_filter = []
-    for i in range(n_level):
+    for i in range(FLAGS.num_level):
         n_filter += [FLAGS.num_filter * pow(2, i)]
     print('Number of filters at each level =', n_filter)
     print('Note: The connection between neurons is proportional to n_filter * n_filter. '
@@ -206,35 +201,17 @@ def main(argv=None):
 
     # Build the neural network, which outputs the logits, i.e. the unscaled values just before
     # the softmax layer, which will then normalise the logits into the probabilities.
+    # TODO: check the tensor dimension here
     n_block = []
-    if FLAGS.model == 'FCN':
-        n_block = [2, 2, 3, 3, 3]
-        logits = build_FCN(image_pl, n_class, n_level=n_level, n_filter=n_filter, n_block=n_block,
-                           training=training_pl, same_dim=32, fc=64)
-    elif FLAGS.model == 'ResNet':
-        n_block = [2, 2, 3, 4, 6]
-        logits = build_ResNet(image_pl, n_class, n_level=n_level, n_filter=n_filter, n_block=n_block,
-                              training=training_pl, use_bottleneck=False, same_dim=32, fc=64)
-    elif FLAGS.model == 'UNet':
+    if FLAGS.model == 'UNet':
         n_block = [2, 2, 2, 2, 2]
-        logits = build_UNet(image_pl, n_class, n_level=n_level, n_filter=n_filter, n_block=n_block,
-                            training=training_pl)
-    elif FLAGS.model == 'UNet-LSTM':
-        logits = build_UNet_LSTM(input_feature, n_class, n_hidden=16)
+        loss, prob, pred = UNet_model(image_pl, label_pl, n_class, n_level,
+                                      n_filter, n_block, training_pl)
+    # elif FLAGS.model == 'UNet-LSTM':
+    #     logits = build_UNet_LSTM(input_feature, n_class, n_hidden=16)
     else:
         print('Error: unknown model {0}.'.format(FLAGS.model))
         exit(0)
-
-    # The softmax probability and the predicted segmentation
-    prob = tf.nn.softmax(logits, name='prob')
-    pred = tf.cast(tf.argmax(prob, axis=-1), dtype=tf.int32, name='pred')
-    print('prob.name = ' + prob.name)
-    print('pred.name = ' + pred.name)
-
-    # Loss
-    label_1hot = tf.one_hot(indices=label_pl, depth=n_class)
-    label_loss = tf.nn.softmax_cross_entropy_with_logits(labels=label_1hot, logits=logits)
-    loss = tf.reduce_mean(label_loss)
 
     # Evaluation metrics
     accuracy = tf_categorical_accuracy(pred, label_pl)
@@ -242,30 +219,22 @@ def main(argv=None):
     dice_da = tf_categorical_dice(pred, label_pl, 2)
 
     # Optimiser
-    lr = FLAGS.learning_rate
-
     # We need to add the operators associated with batch_normalization to the optimiser, according to
     # https://www.tensorflow.org/api_docs/python/tf/layers/batch_normalization
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
-        if FLAGS.optimizer == 'SGD':
-            print('Using SGD optimizer.')
-            train_op = tf.train.GradientDescentOptimizer(learning_rate=lr).minimize(loss)
-        elif FLAGS.optimizer == 'Adam':
+        if FLAGS.optimizer == 'Adam':
             print('Using Adam optimizer.')
-            train_op = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
-        elif FLAGS.optimizer == 'Momentum':
-            print('Using Momentum optimizer with Nesterov momentum.')
-            train_op = tf.train.MomentumOptimizer(learning_rate=lr, momentum=0.9,
-                                                  use_nesterov=True).minimize(loss)
+            train_op = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate).minimize(loss)
         else:
             print('Error: unknown optimizer {0}.'.format(FLAGS.optimizer))
             exit(0)
 
     # Model name and directory
     model_name = '{0}_{1}_level{2}_filter{3}_{4}_{5}_batch{6}_iter{7}_lr{8}'.format(
-        FLAGS.model, FLAGS.seq_name, n_level, n_filter[0], ''.join([str(x) for x in n_block]),
-        FLAGS.optimizer, FLAGS.train_batch_size, FLAGS.train_iteration, FLAGS.learning_rate)
+        FLAGS.model, FLAGS.seq_name, FLAGS.n_level, n_filter[0],
+        ''.join([str(x) for x in n_block]), FLAGS.optimizer,
+        FLAGS.train_batch_size, FLAGS.train_iteration, FLAGS.learning_rate)
     if FLAGS.z_score:
         model_name += '_zscore'
     model_dir = os.path.join(FLAGS.checkpoint_dir, model_name)
@@ -284,8 +253,10 @@ def main(argv=None):
         summary_dir = os.path.join(FLAGS.log_dir, model_name)
         if os.path.exists(summary_dir):
             os.system('rm -rf {0}'.format(summary_dir))
-        train_writer = tf.summary.FileWriter(os.path.join(summary_dir, 'train'), graph=sess.graph)
-        validation_writer = tf.summary.FileWriter(os.path.join(summary_dir, 'validation'), graph=sess.graph)
+        train_writer = tf.summary.FileWriter(os.path.join(summary_dir, 'train'),
+                                             graph=sess.graph)
+        val_writer = tf.summary.FileWriter(os.path.join(summary_dir, 'val'),
+                                           graph=sess.graph)
 
         # Initialise variables
         sess.run(tf.global_variables_initializer())

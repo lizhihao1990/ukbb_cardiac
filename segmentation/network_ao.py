@@ -108,11 +108,17 @@ def UNet_Model(images, labels, n_class, n_level, n_filter, n_block, training):
     logits, net = UNet(images=images, n_class=n_class, n_level=n_level,
                        n_filter=n_filter, n_block=n_block, training=training)
 
+    # The cross-entropy loss
     label_1hot = tf.one_hot(indices=labels, depth=n_class)
     label_loss = tf.nn.softmax_cross_entropy_with_logits(labels=label_1hot,
                                                          logits=logits)
     loss = tf.reduce_mean(label_loss)
-    return loss
+
+    # The softmax probability and the predicted segmentation
+    prob = tf.nn.softmax(logits, name='prob')
+    pred = tf.cast(tf.argmax(prob, axis=-1), dtype=tf.int32, name='pred')
+
+    return loss, prob, pred
 
 
 def UNet_LSTM_Model(images, labels, n_class, n_level, n_filter, n_block, training):
