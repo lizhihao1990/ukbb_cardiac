@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-import os, time, random
-import numpy as np, nibabel as nib
+import os
+import time
+import random
+import numpy as np
+import nibabel as nib
 import tensorflow as tf
 from network import *
 from image_utils import *
@@ -23,7 +26,7 @@ from image_utils import *
 FLAGS = tf.app.flags.FLAGS
 # NOTE: use image_size = 256 for aortic images to learn the boundary.
 # Otherwise, the boundary may be misunderstood as the aorta.
-tf.app.flags.DEFINE_integer('image_size', 192, 'Image size after cropping.')
+tf.app.flags.DEFINE_integer('image_size', 256, 'Image size after cropping.')
 tf.app.flags.DEFINE_integer('time_window', 5, 'Time window for LSTM.')
 tf.app.flags.DEFINE_integer('train_batch_size', 2, 'Number of images for each training batch.')
 tf.app.flags.DEFINE_integer('validation_batch_size', 2, 'Number of images for each validation batch.')
@@ -31,12 +34,10 @@ tf.app.flags.DEFINE_integer('train_iteration', 50000, 'Number of training iterat
 tf.app.flags.DEFINE_integer('num_filter', 16, 'Number of filters for the first convolution layer.')
 tf.app.flags.DEFINE_integer('num_level', 5, 'Number of network levels.')
 tf.app.flags.DEFINE_float('learning_rate', 1e-3, 'Learning rate.')
-tf.app.flags._global_parser.add_argument('--seq_name', choices=['sa', 'la_2ch', 'la_4ch', 'ao'],
-                                         default='sa', help='Sequence name for training.')
-tf.app.flags._global_parser.add_argument('--model', choices=['FCN', 'ResNet', 'UNet', 'UNet-LSTM'],
-                                         default='FCN', help='Model name.')
-tf.app.flags._global_parser.add_argument('--optimizer', choices=['Adam', 'SGD', 'Momentum'],
-                                         default='Adam', help='Optimizer.')
+tf.app.flags._global_parser.add_argument('--seq_name', choices=['ao'],
+                                         default='ao', help='Sequence name for training.')
+tf.app.flags._global_parser.add_argument('--model', choices=['UNet', 'UNet-LSTM'],
+                                         default='UNet', help='Model name.')
 tf.app.flags.DEFINE_string('dataset_dir', '/vol/medic02/users/wbai/data/cardiac_atlas/UKBB_2964/sa',
                            'Path to the dataset directory, which is split into training and validation '
                            'subdirectories.')
