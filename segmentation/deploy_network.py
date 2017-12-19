@@ -32,6 +32,7 @@ tf.app.flags.DEFINE_string('model_path', '/vol/biomedic2/wbai/tmp/github/model/F
 tf.app.flags.DEFINE_boolean('process_seq', True, "Process a time sequence of images.")
 tf.app.flags.DEFINE_boolean('save_seg', True, "Save segmentation.")
 tf.app.flags.DEFINE_boolean('clinical_measure', True, "Calculate clinical measures.")
+tf.app.flags.DEFINE_boolean('cardiac_cnn_tf', False, "Using the previous model used in the paper.")
 
 
 if __name__ == '__main__':
@@ -94,8 +95,14 @@ if __name__ == '__main__':
                     image_fr = np.expand_dims(image_fr, axis=-1)
 
                     # Evaluate the network
-                    prob_fr, pred_fr = sess.run(['prob:0', 'pred:0'],
-                                                feed_dict={'image:0': image_fr, 'training:0': False})
+                    if FLAGS.cardiac_cnn_tf:
+                        prob_fr, pred_fr = sess.run(['prob:0', 'pred:0'],
+                                                    feed_dict={'image:0': image_fr})
+                    else:
+                        prob_fr, pred_fr = sess.run(['prob:0', 'pred:0'],
+                                                    feed_dict={'image:0': image_fr,
+                                                               'training:0': False})
+
 
                     # Transpose and crop the segmentation to recover the original size
                     pred_fr = np.transpose(pred_fr, axes=(1, 2, 0))
@@ -194,8 +201,13 @@ if __name__ == '__main__':
                     image = np.expand_dims(image, axis=-1)
 
                     # Evaluate the network
-                    prob, pred = sess.run(['prob:0', 'pred:0'],
-                                          feed_dict={'image:0': image, 'training:0': False})
+                    if FLAGS.cardiac_cnn_tf:
+                        prob, pred = sess.run(['prob:0', 'pred:0'],
+                                              feed_dict={'image:0': image})
+                    else:
+                        prob, pred = sess.run(['prob:0', 'pred:0'],
+                                              feed_dict={'image:0': image,
+                                                         'training:0': False})
 
                     # Transpose and crop the segmentation to recover the original size
                     pred = np.transpose(pred, axes=(1, 2, 0))
