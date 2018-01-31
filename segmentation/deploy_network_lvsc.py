@@ -22,16 +22,16 @@ from image_utils import *
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags._global_parser.add_argument('--seq_name', choices=['sa', 'la_2ch', 'la_4ch', 'ao'],
                                          default='sa', help="Sequence name.")
-tf.app.flags.DEFINE_string('test_dir', '/vol/biomedic2/wbai/tmp/github/test',
+tf.app.flags.DEFINE_string('test_dir', '/vol/medic02/users/wbai/data/cardiac_atlas/LVSC_2009/challenge_training',
                            'Path to the test set directory, under which images are organised in '
                            'subdirectories for each subject.')
-tf.app.flags.DEFINE_string('dest_dir', '/vol/biomedic2/wbai/tmp/github/output',
+tf.app.flags.DEFINE_string('dest_dir', '/vol/bitbucket/wbai/ukbb_cardiac/LVSC_2009',
                            'Path to the destination directory, where the segmentations will be saved.')
 tf.app.flags.DEFINE_string('model_path', '/vol/bitbucket/wbai/ukbb_cardiac/model/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001.ckpt-50000',
                            'Path to the saved trained model.')
-tf.app.flags.DEFINE_boolean('process_seq', True, "Process a time sequence of images.")
+tf.app.flags.DEFINE_boolean('process_seq', False, "Process a time sequence of images.")
 tf.app.flags.DEFINE_boolean('save_seg', True, "Save segmentation.")
-tf.app.flags.DEFINE_boolean('clinical_measure', True, "Calculate clinical measures.")
+tf.app.flags.DEFINE_boolean('clinical_measure', False, "Calculate clinical measures.")
 tf.app.flags.DEFINE_boolean('cardiac_cnn_tf', False, "Using the previous model used in the paper.")
 
 
@@ -51,7 +51,7 @@ if __name__ == '__main__':
         processed_list = []
         table = []
         table_time = []
-        for data in data_list:
+        for data in data_list[:5]:
             print(data)
             data_dir = os.path.join(FLAGS.test_dir, data)
 
@@ -163,8 +163,8 @@ if __name__ == '__main__':
                     table += [line]
             else:
                 # Process ED and ES time frames
-                image_ED_name = '{0}/{1}_{2}.nii.gz'.format(data_dir, FLAGS.seq_name, 'ED')
-                image_ES_name = '{0}/{1}_{2}.nii.gz'.format(data_dir, FLAGS.seq_name, 'ES')
+                image_ED_name = '{0}/{1}_{2}.nii.gz'.format(data_dir, 'image', 'ED')
+                image_ES_name = '{0}/{1}_{2}.nii.gz'.format(data_dir, 'image', 'ES')
                 if not os.path.exists(image_ED_name) or not os.path.exists(image_ES_name):
                     print('  Directory {0} does not contain an image with file name {1} or {2}. '
                           'Skip.'.format(data_dir, os.path.basename(image_ED_name),
@@ -173,7 +173,7 @@ if __name__ == '__main__':
 
                 measure = {}
                 for fr in ['ED', 'ES']:
-                    image_name = '{0}/{1}_{2}.nii.gz'.format(data_dir, FLAGS.seq_name, fr)
+                    image_name = '{0}/{1}_{2}.nii.gz'.format(data_dir, 'image', fr)
 
                     # Read the image
                     print('  Reading {} ...'.format(image_name))
@@ -228,6 +228,7 @@ if __name__ == '__main__':
                         nim2 = nib.Nifti1Image(pred, nim.affine)
                         nim2.header['pixdim'] = nim.header['pixdim']
                         nib.save(nim2, '{0}/seg_{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr))
+                        os.system('ln -s {0} {1}'.format(image_name, dest_data_dir))
 
                     # Evaluate the clinical measures
                     if FLAGS.seq_name == 'sa' and FLAGS.clinical_measure:
