@@ -28,14 +28,16 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags._global_parser.add_argument('--seq_name', choices=['sa', 'la_2ch', 'la_4ch', 'ao'],
                                          default='sa', help="Sequence name.")
 fine_tune_iter = 10000
-tf.app.flags.DEFINE_string('test_dir', '/vol/medic02/users/wbai/data/cardiac_atlas/LVSC_2009/challenge_validation',
+tf.app.flags.DEFINE_string('test_dir',
+                           '/vol/medic02/users/wbai/data/cardiac_atlas/ACDC_2017/training_split_test',
                            'Path to the test set directory, under which images are organised in '
                            'subdirectories for each subject.')
-tf.app.flags.DEFINE_string('dest_dir', '/vol/bitbucket/wbai/ukbb_cardiac/LVSC_2009/seg_LVSC_2009_fine_tune_iter{0}/challenge_validation'.format(fine_tune_iter),
+tf.app.flags.DEFINE_string('dest_dir',
+                           '/vol/bitbucket/wbai/ukbb_cardiac/ACDC_2017/seg_ACDC_2017_fine_tune_iter{0}/training_split_test'.format(fine_tune_iter),
                            'Path to the destination directory, where the segmentations will be saved.')
 # tf.app.flags.DEFINE_string('model_path', '/vol/bitbucket/wbai/ukbb_cardiac/model/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001.ckpt-50000',
 #                            'Path to the saved trained model.')
-tf.app.flags.DEFINE_string('model_path', '/vol/bitbucket/wbai/ukbb_cardiac/LVSC_2009/model/FCN_sa_level5_filter16_22333_Adam_batch2_iter10000_lr0.0001/FCN_sa_level5_filter16_22333_Adam_batch2_iter10000_lr0.0001.ckpt-{0}'.format(fine_tune_iter),
+tf.app.flags.DEFINE_string('model_path', '/vol/bitbucket/wbai/ukbb_cardiac/ACDC_2017/model/FCN_sa_level5_filter16_22333_Adam_batch2_iter10000_lr0.0001/FCN_sa_level5_filter16_22333_Adam_batch2_iter10000_lr0.0001.ckpt-{0}'.format(fine_tune_iter),
                            'Path to the saved trained model.')
 tf.app.flags.DEFINE_boolean('process_seq', False, "Process a time sequence of images.")
 tf.app.flags.DEFINE_boolean('save_seg', True, "Save segmentation.")
