@@ -64,6 +64,12 @@ if __name__ == '__main__':
                           'Skip.'.format(data_dir, os.path.basename(image_name)))
                     continue
 
+                dest_data_dir = os.path.join(FLAGS.dest_dir, data)
+                seg_name = '{0}/seg_{1}.nii.gz'.format(dest_data_dir, FLAGS.seq_name)
+                if os.path.exists(seg_name):
+                    print('  Directory {0} already segmented. Skip.'.format(data_dir))
+                    continue
+
                 # Read the image
                 print('  Reading {} ...'.format(image_name))
                 nim = nib.load(image_name)
@@ -151,6 +157,10 @@ if __name__ == '__main__':
                     volume_per_voxel = dx * dy * dz * 1e-3
                     density = 1.05
 
+                    # Heart rate
+                    duration_per_cycle = nim.header['dim'][4] * nim.header['pixdim'][4]
+                    heart_rate = 60.0 / duration_per_cycle
+
                     for fr in ['ED', 'ES']:
                         measure[fr] = {}
                         measure[fr]['LVV'] = np.sum(pred[:, :, :, k[fr]] == 1) * volume_per_voxel
@@ -159,7 +169,8 @@ if __name__ == '__main__':
 
                     line = [measure['ED']['LVV'], measure['ES']['LVV'],
                             measure['ED']['LVM'],
-                            measure['ED']['RVV'], measure['ES']['RVV']]
+                            measure['ED']['RVV'], measure['ES']['RVV'],
+                            heart_rate]
                     table += [line]
             else:
                 # Process ED and ES time frames
@@ -249,9 +260,12 @@ if __name__ == '__main__':
 
         # Save the spreadsheet for the clinical measures
         if FLAGS.seq_name == 'sa' and FLAGS.clinical_measure:
-            column_names = ['LVEDV (mL)', 'LVESV (mL)', 'LVM (g)', 'RVEDV (mL)', 'RVESV (mL)']
+            if FLAGS.process_seq:
+                column_names = ['LVEDV (mL)', 'LVESV (mL)', 'LVM (g)', 'RVEDV (mL)', 'RVESV (mL)', 'Heart rate (bpm)']
+            else:
+                column_names = ['LVEDV (mL)', 'LVESV (mL)', 'LVM (g)', 'RVEDV (mL)', 'RVESV (mL)']
             df = pd.DataFrame(table, index=processed_list, columns=column_names)
-            csv_name = os.path.join(FLAGS.dest_dir, 'clinical_measure.csv')
+            csv_name = os.path.join(FLAGS.dest_dir, '../clinical_measure.csv')
             print('  Saving clinical measures at {0} ...'.format(csv_name))
             df.to_csv(csv_name)
 
