@@ -19,8 +19,11 @@
     then splits the data into training/validation/test so that we could train and
     evaluate our neural networks.
     """
-import os, time, random
-import numpy as np, pandas as pd, nibabel as nib
+import os
+import random
+import numpy as np
+import pandas as pd
+import nibabel as nib
 
 
 if __name__ == '__main__':

@@ -22,16 +22,16 @@
     annotated contours from the cvi42 xml files, read the matching DICOM and cvi42 contours
     and finally save them as nifti images.
     """
-import os, csv, glob, re, time
+import os
+import glob
 import pandas as pd
-import dateutil.parser
 from biobank_utils import *
 import parse_cvi42_xml
 
 
 if __name__ == '__main__':
     # Path to the downloaded data
-    data_path = '/vol/vipdata/data/biobank/cardiac/Application_2964/data_path'
+    data_path = '/vol/vipdata/data/biobank/cardiac/Application_2964/data'
 
     # For each subdirectory
     for sub_path in sorted(os.listdir(data_path)):
@@ -39,6 +39,7 @@ if __name__ == '__main__':
         # For each subject in the subdirectory
         for eid in sorted(os.listdir(sub_path)):
             data_dir = os.path.join(sub_path, eid)
+            print(eid)
             # Only convert data if there is manual annotation, i.e. cvi42 files
             if os.path.exists(os.path.join(data_dir, '{0}_cvi42.zip'.format(eid))):
                 # Check the annotator's name
@@ -85,9 +86,9 @@ if __name__ == '__main__':
                     continue
 
                 # Convert dicom files and annotations into nifti images
-                dset = Biobank_Dataset(dicom_dir, cvi42_contours_dir)
+                dset = Biobank_Dataset(dicom_dir, data_dir, cvi42_contours_dir)
                 dset.read_dicom_images()
-                dset.convert_dicom_to_nifti(data_dir)
+                # dset.convert_dicom_to_nifti()
 
                 # Remove intermediate files
                 os.system('rm -rf {0} {1}'.format(dicom_dir, cvi42_contours_dir))

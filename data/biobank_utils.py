@@ -23,9 +23,16 @@
     fail in reading certain DICOM images, perhaps due to the DICOM format, which has no standard
     and vary between manufacturers and machines.
 """
-import os, glob, re, dicom, pickle, cv2
+import os
+import glob
+import re
+import dicom
+import pickle
+import cv2
 import SimpleITK as sitk
-import numpy as np, nibabel as nib
+import numpy as np
+import nibabel as nib
+import vtk
 
 
 def repl(m):
@@ -60,11 +67,12 @@ class BaseImage(object):
 
 class Biobank_Dataset(object):
     """ Class for managing Biobank datasets """
-    def __init__(self, input_dir, cvi42_dir=None):
+    def __init__(self, input_dir, output_dir, cvi42_dir=None):
         """
             Initialise data
             This is important, otherwise the dictionaries will not be cleaned between instances.
             """
+        self.output_dir = output_dir
         self.subdir = {}
         self.data = {}
 
@@ -77,6 +85,7 @@ class Biobank_Dataset(object):
         sax_mix_dir = []
         lax_mix_dir = []
         ao_dir = []
+        tag_dir = []
         for s in subdirs:
             m = re.match('CINE_segmented_SAX_b(\d*)$', s)
             if m:
@@ -93,6 +102,9 @@ class Biobank_Dataset(object):
                 lax_mix_dir = os.path.join(input_dir, s)
             elif re.match('CINE_segmented_Ao_dist$', s):
                 ao_dir = os.path.join(input_dir, s)
+            m = re.match('cine_tagging_3sl_SAX_b(\d*)s$', s)
+            if m:
+                tag_dir += [(os.path.join(input_dir, s), int(m.group(1)))]
 
         if not sax_dir:
             print('Warning: SAX subdirectories not found!')
@@ -148,6 +160,15 @@ class Biobank_Dataset(object):
             self.subdir['la_4ch'] = [lax_4ch_dir]
         if ao_dir:
             self.subdir['ao'] = [ao_dir]
+        if tag_dir:
+            tag_dir = sorted(tag_dir, key=lambda x: x[1])
+            for x, y in tag_dir:
+                self.subdir['tag_{0}'.format(y)] = [x]
+            # Currently, we do not combine the three slices of tagging images
+            # into a single volume, as they do not form a cuboid. We can
+            # post-process them by using one slice as reference and interpolate
+            # the other two slices to make a cuboid.
+            # self.subdir['tag'] = [x for x, y in tag_dir]
 
         self.cvi42_dir = cvi42_dir
 
@@ -374,6 +395,62 @@ class Biobank_Dataset(object):
                                 label_up[:, :, z, t] = lab_up.transpose()
                                 label[:, :, z, t] = lab_up[::up, ::up].transpose()
 
+                                # Save the landmarks at long-axis 4-chamber view
+                                points = []
+                                if name == 'la_4ch':
+                                    if 'lalaContour' in contours and 'laraContour' in contours:
+                                        # Extract the first, second last and last points
+                                        # which are the two hinge points and valve point
+                                        points += [np.append(contours['lalaContour'][0], z)]
+                                        points += [np.append(contours['lalaContour'][-1], z)]
+                                        points += [np.append(contours['lalaContour'][-2], z)]
+
+                                        points += [np.append(contours['laraContour'][0], z)]
+                                        points += [np.append(contours['laraContour'][-1], z)]
+                                        points += [np.append(contours['laraContour'][-2], z)]
+                                    if 'laxLvExtentPoints' in contours:
+                                        # The three points describing the extent of LV
+                                        # Just use the apex one, as we already have the two hinge points.
+                                        points += [np.append(contours['laxLvExtentPoints'][2], z)]
+                                elif name == 'la_2ch':
+                                    if 'lalaContour' in contours:
+                                        # Extract the first, second last and last points
+                                        # which are the two hinge points and valve point
+                                        points += [np.append(contours['lalaContour'][0], z)]
+                                        points += [np.append(contours['lalaContour'][-1], z)]
+                                        points += [np.append(contours['lalaContour'][-2], z)]
+                                points = np.array(points)
+
+                                # Convert the landmarks into world coordinate system
+                                for idx_p in range(len(points)):
+                                    p = points[idx_p]
+                                    q = np.dot(affine, np.append(p, [1]))
+                                    points[idx_p] = q[:3]
+
+                                # Write the landmarks
+                                if len(points) >= 1:
+                                    print(name)
+
+                                    # Sort the order of points
+                                    if name == 'la_4ch':
+                                        # The landmarks for LA and RA go from left to right (+X)
+                                        points[:3] = points[points[:3, 0].argsort()]
+                                        points[3:6] = points[3 + points[3:6, 0].argsort()]
+                                    elif name == 'la_2ch':
+                                        # The landmarks for LA go from inferior to superior (+Y)
+                                        points[:3] = points[points[:3, 1].argsort()]
+
+                                    vtk_points = vtk.vtkPoints()
+                                    for p in points:
+                                        vtk_points.InsertNextPoint(p[0], p[1], p[2])
+                                    poly = vtk.vtkPolyData()
+                                    poly.SetPoints(vtk_points)
+                                    writer = vtk.vtkPolyDataWriter()
+                                    writer.SetInputData(poly)
+                                    writer.SetFileName(os.path.join(self.output_dir,
+                                                                    '{0}_{1:02d}.vtk'.format(name, t)))
+                                    writer.Write()
+
             # Temporal spacing
             dt = (files_time[1][1] - files_time[0][1]) * 1e-3
 
@@ -398,8 +475,8 @@ class Biobank_Dataset(object):
                     self.data['label_up_' + name].affine = np.dot(affine, up_matrix)
                     self.data['label_up_' + name].dt = dt
 
-    def convert_dicom_to_nifti(self, output_dir):
+    def convert_dicom_to_nifti(self):
         """ Save the image in nifti format. """
         for name, image in self.data.items():
-            image.WriteToNifti(os.path.join(output_dir, '{0}.nii.gz'.format(name)))
+            image.WriteToNifti(os.path.join(self.output_dir, '{0}.nii.gz'.format(name)))
 
