@@ -227,7 +227,6 @@ if __name__ == '__main__':
                     seg_time = time.time() - start_seg_time
                     print('  Segmentation time = {:3f}s'.format(seg_time))
                     table_time += [seg_time]
-                    processed_list += [data]
 
                     # Save the segmentation
                     if FLAGS.save_seg:
@@ -252,6 +251,7 @@ if __name__ == '__main__':
                         measure[fr]['LVM'] = np.sum(pred == 2) * volume_per_voxel * density
                         measure[fr]['RVV'] = np.sum(pred == 3) * volume_per_voxel
 
+                processed_list += [data]
                 if FLAGS.clinical_measure and FLAGS.seq_name == 'sa':
                     line = [measure['ED']['LVV'], measure['ES']['LVV'],
                             measure['ED']['LVM'],
