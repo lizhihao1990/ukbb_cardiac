@@ -33,6 +33,8 @@ tf.app.flags.DEFINE_boolean('process_seq', True, "Process a time sequence of ima
 tf.app.flags.DEFINE_boolean('save_seg', True, "Save segmentation.")
 tf.app.flags.DEFINE_boolean('clinical_measure', True, "Calculate clinical measures.")
 tf.app.flags.DEFINE_boolean('cardiac_cnn_tf', False, "Using the previous model used in the paper.")
+tf.app.flags.DEFINE_boolean('z_score', True, 'Normalise the image intensity to z-score. '
+                                             'Otherwise, rescale the intensity.')
 
 
 if __name__ == '__main__':
@@ -80,8 +82,11 @@ if __name__ == '__main__':
                 print('  Segmenting full sequence ...')
                 start_seg_time = time.time()
 
-                # Intensity rescaling
-                image = rescale_intensity(image, (1, 99))
+                # Intensity normalisation
+                if FLAGS.z_score:
+                    image = normalise_intensity(image, 1.0)
+                else:
+                    image = rescale_intensity(image, (1.0, 99.0))
 
                 # Prediction (segmentation)
                 pred = np.zeros(image.shape)
@@ -197,8 +202,11 @@ if __name__ == '__main__':
                     print('  Segmenting {} frame ...'.format(fr))
                     start_seg_time = time.time()
 
-                    # Intensity rescaling
-                    image = rescale_intensity(image, (1, 99))
+                    # Intensity normalisation
+                    if FLAGS.z_score:
+                        image = normalise_intensity(image, 1.0)
+                    else:
+                        image = rescale_intensity(image, (1.0, 99.0))
 
                     # Pad the image size to be a factor of 16 so that the downsample and upsample procedures
                     # in the network will result in the same image size at each resolution level.
