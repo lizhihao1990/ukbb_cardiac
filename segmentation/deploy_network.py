@@ -33,8 +33,8 @@ tf.app.flags.DEFINE_boolean('process_seq', True, "Process a time sequence of ima
 tf.app.flags.DEFINE_boolean('save_seg', True, "Save segmentation.")
 tf.app.flags.DEFINE_boolean('clinical_measure', True, "Calculate clinical measures.")
 tf.app.flags.DEFINE_boolean('cardiac_cnn_tf', False, "Using the previous model used in the paper.")
-tf.app.flags.DEFINE_boolean('z_score', True, 'Normalise the image intensity to z-score. '
-                                             'Otherwise, rescale the intensity.')
+tf.app.flags.DEFINE_boolean('z_score', False, 'Normalise the image intensity to z-score. '
+                                              'Otherwise, rescale the intensity.')
 
 
 if __name__ == '__main__':
