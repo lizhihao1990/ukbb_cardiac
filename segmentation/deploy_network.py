@@ -27,7 +27,7 @@ tf.app.flags.DEFINE_string('test_dir', '/vol/biomedic2/wbai/tmp/github/test',
                            'subdirectories for each subject.')
 tf.app.flags.DEFINE_string('dest_dir', '/vol/biomedic2/wbai/tmp/github/output',
                            'Path to the destination directory, where the segmentations will be saved.')
-tf.app.flags.DEFINE_string('model_path', '/vol/bitbucket/wbai/ukbb_cardiac/model/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001.ckpt-50000',
+tf.app.flags.DEFINE_string('model_path', '/vol/bitbucket/wbai/ukbb_cardiac/UKBB_2964/model/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001.ckpt-50000',
                            'Path to the saved trained model.')
 tf.app.flags.DEFINE_boolean('process_seq', True, "Process a time sequence of images.")
 tf.app.flags.DEFINE_boolean('save_seg', True, "Save segmentation.")
@@ -35,6 +35,8 @@ tf.app.flags.DEFINE_boolean('clinical_measure', True, "Calculate clinical measur
 tf.app.flags.DEFINE_boolean('cardiac_cnn_tf', False, "Using the previous model used in the paper.")
 tf.app.flags.DEFINE_boolean('z_score', False, 'Normalise the image intensity to z-score. '
                                               'Otherwise, rescale the intensity.')
+tf.app.flags.DEFINE_boolean('seg_4ch', False, 'Segment all the four chambers in long-axis view. '
+                                              'The network is trained using Application 18545.')
 
 
 if __name__ == '__main__':
@@ -49,7 +51,7 @@ if __name__ == '__main__':
         start_time = time.time()
 
         # Process each subject subdirectory
-        data_list = sorted(os.listdir(FLAGS.test_dir))
+        data_list = sorted(os.listdir(FLAGS.test_dir))[:10]
         processed_list = []
         table = []
         table_time = []
@@ -67,10 +69,14 @@ if __name__ == '__main__':
                     continue
 
                 dest_data_dir = os.path.join(FLAGS.dest_dir, data)
-                seg_name = '{0}/seg_{1}.nii.gz'.format(dest_data_dir, FLAGS.seq_name)
-                if os.path.exists(seg_name):
-                    print('  Directory {0} already segmented. Skip.'.format(data_dir))
-                    continue
+                if FLAGS.seg_4ch:
+                    seg_name = '{0}/seg_{1}_4ch.nii.gz'.format(dest_data_dir, FLAGS.seq_name)
+                else:
+                    seg_name = '{0}/seg_{1}.nii.gz'.format(dest_data_dir, FLAGS.seq_name)
+
+                # if os.path.exists(seg_name):
+                #     print('  Directory {0} already segmented. Skip.'.format(data_dir))
+                #     continue
 
                 # Read the image
                 print('  Reading {} ...'.format(image_name))
@@ -130,7 +136,7 @@ if __name__ == '__main__':
                 if FLAGS.seq_name == 'sa' or FLAGS.seq_name == 'la_2ch' or FLAGS.seq_name == 'la_4ch':
                     k = {}
                     k['ED'] = 0
-                    if FLAGS.seq_name == 'sa':
+                    if FLAGS.seq_name == 'sa' or (FLAGS.seq_name == 'la_4ch' and FLAGS.seg_4ch):
                         k['ES'] = np.argmin(np.sum(pred == 1, axis=(0, 1, 2)))
                     else:
                         k['ES'] = np.argmax(np.sum(pred == 1, axis=(0, 1, 2)))
@@ -145,14 +151,25 @@ if __name__ == '__main__':
 
                     nim2 = nib.Nifti1Image(pred, nim.affine)
                     nim2.header['pixdim'] = nim.header['pixdim']
-                    nib.save(nim2, '{0}/seg_{1}.nii.gz'.format(dest_data_dir, FLAGS.seq_name))
+                    nib.save(nim2, seg_name)
 
                     if FLAGS.seq_name == 'sa' or FLAGS.seq_name == 'la_2ch' or FLAGS.seq_name == 'la_4ch':
                         for fr in ['ED', 'ES']:
+                            if FLAGS.seq_name == 'la_4ch' and FLAGS.seg_4ch:
+                                save_image_name = '{0}/{1}_4ch_{2}.nii.gz'.format(dest_data_dir,
+                                                                                  FLAGS.seq_name, fr)
+                                save_seg_name = '{0}/seg_{1}_4ch_{2}.nii.gz'.format(dest_data_dir,
+                                                                                    FLAGS.seq_name, fr)
+                            else:
+                                save_image_name = '{0}/{1}_{2}.nii.gz'.format(dest_data_dir,
+                                                                              FLAGS.seq_name, fr)
+                                save_seg_name = '{0}/seg_{1}_{2}.nii.gz'.format(dest_data_dir,
+                                                                                FLAGS.seq_name, fr)
+
                             nib.save(nib.Nifti1Image(orig_image[:, :, :, k[fr]], nim.affine),
-                                     '{0}/{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr))
+                                     save_image_name)
                             nib.save(nib.Nifti1Image(pred[:, :, :, k[fr]], nim.affine),
-                                     '{0}/seg_{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr))
+                                     save_seg_name)
 
                 # Evaluate the clinical measures
                 if FLAGS.seq_name == 'sa' and FLAGS.clinical_measure:
@@ -245,7 +262,11 @@ if __name__ == '__main__':
 
                         nim2 = nib.Nifti1Image(pred, nim.affine)
                         nim2.header['pixdim'] = nim.header['pixdim']
-                        nib.save(nim2, '{0}/seg_{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr))
+                        if FLAGS.seg_4ch:
+                            seg_name = '{0}/seg_{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr)
+                        else:
+                            seg_name = '{0}/seg_{1}_4ch_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr)
+                        nib.save(nim2, seg_name)
 
                     # Evaluate the clinical measures
                     if FLAGS.seq_name == 'sa' and FLAGS.clinical_measure:

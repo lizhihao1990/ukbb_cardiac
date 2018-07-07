@@ -39,12 +39,12 @@ tf.app.flags._global_parser.add_argument('--optimizer', choices=['Adam', 'SGD', 
 tf.app.flags.DEFINE_string('dataset_dir', '/vol/medic02/users/wbai/data/cardiac_atlas/UKBB_2964/sa',
                            'Path to the dataset directory, which is split into training and validation '
                            'subdirectories.')
-tf.app.flags.DEFINE_string('log_dir', '/vol/bitbucket/wbai/ukbb_cardiac/log',
+tf.app.flags.DEFINE_string('log_dir', '/vol/bitbucket/wbai/ukbb_cardiac/UKBB_2964/log',
                            'Directory for saving the log file.')
-tf.app.flags.DEFINE_string('checkpoint_dir', '/vol/bitbucket/wbai/ukbb_cardiac/model',
+tf.app.flags.DEFINE_string('checkpoint_dir', '/vol/bitbucket/wbai/ukbb_cardiac/UKBB_2964/model',
                            'Directory for saving the trained model.')
-tf.app.flags.DEFINE_boolean('z_score', True, 'Normalise the image intensity to z-score. '
-                                             'Otherwise, rescale the intensity.')
+tf.app.flags.DEFINE_boolean('z_score', False, 'Normalise the image intensity to z-score. '
+                                              'Otherwise, rescale the intensity.')
 
 
 def get_random_batch(filename_list, batch_size, image_size=192, data_augmentation=False,
@@ -158,7 +158,10 @@ def main(argv=None):
     elif FLAGS.seq_name == 'la_4ch':
         # la_4ch, long-axis 4 chamber views
         # 3 classes (background, LA cavity, RA cavity)
-        n_class = 3
+        # n_class = 3
+        # la_4ch, long-axis 4 chamber views
+        # 6 classes (background, LV cavity, LV myocardium, RV cavity, LA cavity, RA cavity)
+        n_class = 6
     elif FLAGS.seq_name == 'ao':
         # ao, aortic distensibility images
         # 3 classes (background, ascending aorta, descending aorta)
@@ -211,8 +214,11 @@ def main(argv=None):
     dice_lv = tf_categorical_dice(pred, label_pl, 1)
     dice_myo = tf_categorical_dice(pred, label_pl, 2)
     dice_rv = tf_categorical_dice(pred, label_pl, 3)
-    dice_la = tf_categorical_dice(pred, label_pl, 1)
-    dice_ra = tf_categorical_dice(pred, label_pl, 2)
+    # dice_la = tf_categorical_dice(pred, label_pl, 1)
+    # dice_ra = tf_categorical_dice(pred, label_pl, 2)
+    dice_la = tf_categorical_dice(pred, label_pl, 4)
+    dice_ra = tf_categorical_dice(pred, label_pl, 5)
+
     dice_aa = tf_categorical_dice(pred, label_pl, 1)
     dice_da = tf_categorical_dice(pred, label_pl, 2)
 
@@ -257,7 +263,8 @@ def main(argv=None):
     elif FLAGS.seq_name == 'la_2ch':
         f_log.write('iteration,time,train_loss,train_acc,test_loss,test_acc,test_dice_la\n')
     elif FLAGS.seq_name == 'la_4ch':
-        f_log.write('iteration,time,train_loss,train_acc,test_loss,test_acc,test_dice_la,test_dice_ra\n')
+        # f_log.write('iteration,time,train_loss,train_acc,test_loss,test_acc,test_dice_la,test_dice_ra\n')
+        f_log.write('iteration,time,train_loss,train_acc,test_loss,test_acc,test_dice_lv,test_dice_myo,test_dice_rv,test_dice_la,test_dice_ra\n')
     elif FLAGS.seq_name == 'ao':
         f_log.write('iteration,time,train_loss,train_acc,test_loss,test_acc,test_dice_aa,test_dice_da\n')
 
@@ -318,8 +325,12 @@ def main(argv=None):
                         sess.run([loss, accuracy, dice_la],
                                  {image_pl: images, label_pl: labels, training_pl: False})
                 elif FLAGS.seq_name == 'la_4ch':
-                    validation_loss, validation_acc, validation_dice_la, validation_dice_ra = \
-                        sess.run([loss, accuracy, dice_la, dice_ra],
+                    # validation_loss, validation_acc, validation_dice_la, validation_dice_ra = \
+                    #     sess.run([loss, accuracy, dice_la, dice_ra],
+                    #              {image_pl: images, label_pl: labels, training_pl: False})
+                    validation_loss, validation_acc, validation_dice_lv, validation_dice_myo, \
+                    validation_dice_rv, validation_dice_la, validation_dice_ra = \
+                        sess.run([loss, accuracy, dice_lv, dice_myo, dice_rv, dice_la, dice_ra],
                                  {image_pl: images, label_pl: labels, training_pl: False})
                 elif FLAGS.seq_name == 'ao':
                     validation_loss, validation_acc, validation_dice_aa, validation_dice_da = \
@@ -336,6 +347,9 @@ def main(argv=None):
                 elif FLAGS.seq_name == 'la_2ch':
                     summary.value.add(tag='dice_la', simple_value=validation_dice_la)
                 elif FLAGS.seq_name == 'la_4ch':
+                    summary.value.add(tag='dice_lv', simple_value=validation_dice_lv)
+                    summary.value.add(tag='dice_myo', simple_value=validation_dice_myo)
+                    summary.value.add(tag='dice_rv', simple_value=validation_dice_rv)
                     summary.value.add(tag='dice_la', simple_value=validation_dice_la)
                     summary.value.add(tag='dice_ra', simple_value=validation_dice_ra)
                 elif FLAGS.seq_name == 'ao':
@@ -357,6 +371,9 @@ def main(argv=None):
                 elif FLAGS.seq_name == 'la_2ch':
                     print('  validation Dice LA:\t\t{:.6f}'.format(validation_dice_la))
                 elif FLAGS.seq_name == 'la_4ch':
+                    print('  validation Dice LV:\t\t{:.6f}'.format(validation_dice_lv))
+                    print('  validation Dice Myo:\t\t{:.6f}'.format(validation_dice_myo))
+                    print('  validation Dice RV:\t\t{:.6f}'.format(validation_dice_rv))
                     print('  validation Dice LA:\t\t{:.6f}'.format(validation_dice_la))
                     print('  validation Dice RA:\t\t{:.6f}'.format(validation_dice_ra))
                 elif FLAGS.seq_name == 'ao':
@@ -373,9 +390,10 @@ def main(argv=None):
                         iteration, time.time() - start_time, train_loss, train_acc, validation_loss,
                         validation_acc, validation_dice_la))
                 elif FLAGS.seq_name == 'la_4ch':
-                    f_log.write('{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}\n'.format(
+                    f_log.write('{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}\n'.format(
                         iteration, time.time() - start_time, train_loss, train_acc, validation_loss,
-                        validation_acc, validation_dice_la, validation_dice_ra))
+                        validation_acc, validation_dice_lv, validation_dice_myo, validation_dice_rv,
+                        validation_dice_la, validation_dice_ra))
                 elif FLAGS.seq_name == 'ao':
                     f_log.write('{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}\n'.format(
                         iteration, time.time() - start_time, train_loss, train_acc, validation_loss,
