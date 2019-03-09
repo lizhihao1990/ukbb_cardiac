@@ -13,21 +13,28 @@
 # limitations under the License.
 # ==============================================================================
 import os, time, math
-import numpy as np, nibabel as nib, pandas as pd
+import numpy as np
+import nibabel as nib
+import pandas as pd
 import tensorflow as tf
+from scipy import ndimage
 from image_utils import *
 
 
 """ Deployment parameters """
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags._global_parser.add_argument('--seq_name', choices=['sa', 'la_2ch', 'la_4ch', 'ao'],
-                                         default='sa', help="Sequence name.")
+# tf.app.flags._global_parser.add_argument('--seq_name', choices=['sa', 'la_2ch', 'la_4ch', 'ao'],
+#                                          default='sa', help="Sequence name.")
+tf.app.flags.DEFINE_string('seq_name', 'sa',
+                           "Sequence name.")
 tf.app.flags.DEFINE_string('test_dir', '/vol/biomedic2/wbai/tmp/github/test',
                            'Path to the test set directory, under which images are organised in '
                            'subdirectories for each subject.')
 tf.app.flags.DEFINE_string('dest_dir', '/vol/biomedic2/wbai/tmp/github/output',
                            'Path to the destination directory, where the segmentations will be saved.')
-tf.app.flags.DEFINE_string('model_path', '/vol/bitbucket/wbai/ukbb_cardiac/UKBB_2964/model/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001.ckpt-50000',
+#tf.app.flags.DEFINE_string('model_path', '/vol/bitbucket/wbai/ukbb_cardiac/UKBB_2964/model/#FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001/#FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001.ckpt-50000',
+#                           'Path to the saved trained model.')
+tf.app.flags.DEFINE_string('model_path', '/vol/biomedic2/wbai/ukbb_cardiac/UKBB_2964/model/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001.ckpt-50000',
                            'Path to the saved trained model.')
 tf.app.flags.DEFINE_boolean('process_seq', True, "Process a time sequence of images.")
 tf.app.flags.DEFINE_boolean('save_seg', True, "Save segmentation.")
@@ -37,6 +44,7 @@ tf.app.flags.DEFINE_boolean('z_score', False, 'Normalise the image intensity to 
                                               'Otherwise, rescale the intensity.')
 tf.app.flags.DEFINE_boolean('seg_4ch', False, 'Segment all the four chambers in long-axis view. '
                                               'The network is trained using Application 18545.')
+tf.app.flags.DEFINE_boolean('upsample', False, 'Upsample the probability map and segmentation.')
 
 
 if __name__ == '__main__':
@@ -51,13 +59,16 @@ if __name__ == '__main__':
         start_time = time.time()
 
         # Process each subject subdirectory
-        data_list = sorted(os.listdir(FLAGS.test_dir))[:10]
+        data_list = sorted(os.listdir(FLAGS.test_dir))
         processed_list = []
         table = []
         table_time = []
         for data in data_list:
             print(data)
             data_dir = os.path.join(FLAGS.test_dir, data)
+
+            # if os.path.exists('{0}/seg_{1}.nii.gz'.format(data_dir, FLAGS.seq_name)):
+            #     continue
 
             if FLAGS.process_seq:
                 # Process the temporal sequence
@@ -70,13 +81,13 @@ if __name__ == '__main__':
 
                 dest_data_dir = os.path.join(FLAGS.dest_dir, data)
                 if FLAGS.seg_4ch:
-                    seg_name = '{0}/seg_{1}_4ch.nii.gz'.format(dest_data_dir, FLAGS.seq_name)
+                    seg_name = '{0}/seg2_{1}.nii.gz'.format(dest_data_dir, FLAGS.seq_name)
                 else:
                     seg_name = '{0}/seg_{1}.nii.gz'.format(dest_data_dir, FLAGS.seq_name)
 
-                # if os.path.exists(seg_name):
-                #     print('  Directory {0} already segmented. Skip.'.format(data_dir))
-                #     continue
+                if os.path.exists(seg_name):
+                    print('  Directory {0} already segmented. Skip.'.format(data_dir))
+                    continue
 
                 # Read the image
                 print('  Reading {} ...'.format(image_name))
@@ -96,6 +107,10 @@ if __name__ == '__main__':
 
                 # Prediction (segmentation)
                 pred = np.zeros(image.shape)
+
+                if FLAGS.upsample:
+                    factor = 4
+                    pred_zoom = np.zeros((X * factor, Y * factor, Z, T))
 
                 # Pad the image size to be a factor of 16 so that the downsample and upsample procedures
                 # in the network will result in the same image size at each resolution level.
@@ -120,11 +135,25 @@ if __name__ == '__main__':
                                                     feed_dict={'image:0': image_fr,
                                                                'training:0': False})
 
-
                     # Transpose and crop the segmentation to recover the original size
                     pred_fr = np.transpose(pred_fr, axes=(1, 2, 0))
                     pred_fr = pred_fr[x_pre:x_pre + X, y_pre:y_pre + Y]
                     pred[:, :, :, t] = pred_fr
+
+                    if FLAGS.upsample:
+                        prob_fr = np.transpose(prob_fr, axes=(1, 2, 0, 3))
+                        prob_fr = prob_fr[x_pre:x_pre + X, y_pre:y_pre + Y]
+
+                        nim2 = nib.Nifti1Image(prob_fr, nim.affine)
+                        nim2.header['pixdim'] = nim.header['pixdim']
+                        nib.save(nim2, '{0}/prob_{1}_fr{2:02d}.nii.gz'.format(dest_data_dir,
+                                                                              FLAGS.seq_name, t))
+
+                        # prob_fr_zoom = np.zeros((X * factor, Y * factor, Z, prob_fr.shape[-1]))
+                        # for z in range(Z):
+                        #     prob_fr_zoom[:, :, z, :] = ndimage.zoom(prob_fr[:, :, z, :],
+                        #                                             zoom=(factor, factor, 1))
+                        # pred_zoom[:, :, :, t] = np.argmax(prob_fr_zoom, axis=-1)
 
                 seg_time = time.time() - start_seg_time
                 print('  Segmentation time = {:3f}s'.format(seg_time))
@@ -153,23 +182,30 @@ if __name__ == '__main__':
                     nim2.header['pixdim'] = nim.header['pixdim']
                     nib.save(nim2, seg_name)
 
+                    # if FLAGS.upsample:
+                    #     seg_zoom_name = '{0}/seg_up_{1}.nii.gz'.format(dest_data_dir, FLAGS.seq_name)
+                    #     affine2 = np.dot(nim.affine,
+                    #                      np.diag([1.0 / factor, 1.0/ factor, 1, 1]))
+                    #     nim2 = nib.Nifti1Image(pred_zoom, affine2)
+                    #     nim2.header['pixdim'] = nim.header['pixdim']
+                    #     nib.save(nim2, seg_zoom_name)
+
                     if FLAGS.seq_name == 'sa' or FLAGS.seq_name == 'la_2ch' or FLAGS.seq_name == 'la_4ch':
                         for fr in ['ED', 'ES']:
                             if FLAGS.seq_name == 'la_4ch' and FLAGS.seg_4ch:
-                                save_image_name = '{0}/{1}_4ch_{2}.nii.gz'.format(dest_data_dir,
-                                                                                  FLAGS.seq_name, fr)
-                                save_seg_name = '{0}/seg_{1}_4ch_{2}.nii.gz'.format(dest_data_dir,
-                                                                                    FLAGS.seq_name, fr)
+                                save_seg_name = '{0}/seg2_{1}_{2}.nii.gz'.format(dest_data_dir,
+                                                                                 FLAGS.seq_name, fr)
+                                nib.save(nib.Nifti1Image(pred[:, :, :, k[fr]], nim.affine),
+                                         save_seg_name)
                             else:
                                 save_image_name = '{0}/{1}_{2}.nii.gz'.format(dest_data_dir,
                                                                               FLAGS.seq_name, fr)
                                 save_seg_name = '{0}/seg_{1}_{2}.nii.gz'.format(dest_data_dir,
                                                                                 FLAGS.seq_name, fr)
-
-                            nib.save(nib.Nifti1Image(orig_image[:, :, :, k[fr]], nim.affine),
-                                     save_image_name)
-                            nib.save(nib.Nifti1Image(pred[:, :, :, k[fr]], nim.affine),
-                                     save_seg_name)
+                                nib.save(nib.Nifti1Image(orig_image[:, :, :, k[fr]], nim.affine),
+                                         save_image_name)
+                                nib.save(nib.Nifti1Image(pred[:, :, :, k[fr]], nim.affine),
+                                         save_seg_name)
 
                 # Evaluate the clinical measures
                 if FLAGS.seq_name == 'sa' and FLAGS.clinical_measure:
@@ -263,9 +299,9 @@ if __name__ == '__main__':
                         nim2 = nib.Nifti1Image(pred, nim.affine)
                         nim2.header['pixdim'] = nim.header['pixdim']
                         if FLAGS.seg_4ch:
-                            seg_name = '{0}/seg_{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr)
+                            seg_name = '{0}/seg2_{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr)
                         else:
-                            seg_name = '{0}/seg_{1}_4ch_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr)
+                            seg_name = '{0}/seg_{1}_{2}.nii.gz'.format(dest_data_dir, FLAGS.seq_name, fr)
                         nib.save(nim2, seg_name)
 
                     # Evaluate the clinical measures

@@ -26,7 +26,7 @@
 import os
 import glob
 import re
-import dicom
+import pydicom as dicom
 import pickle
 import cv2
 import SimpleITK as sitk
@@ -85,6 +85,13 @@ class Biobank_Dataset(object):
         sax_mix_dir = []
         lax_mix_dir = []
         ao_dir = []
+        lvot_dir = []
+        flow_dir = []
+        flow_mag_dir = []
+        flow_pha_dir = []
+        shmolli_dir = []
+        shmolli_fitpar_dir = []
+        shmolli_t1map_dir = []
         tag_dir = []
         for s in subdirs:
             m = re.match('CINE_segmented_SAX_b(\d*)$', s)
@@ -102,6 +109,20 @@ class Biobank_Dataset(object):
                 lax_mix_dir = os.path.join(input_dir, s)
             elif re.match('CINE_segmented_Ao_dist$', s):
                 ao_dir = os.path.join(input_dir, s)
+            elif re.match('CINE_segmented_LVOT$', s):
+                lvot_dir = os.path.join(input_dir, s)
+            elif re.match('flow_250_tp_AoV_bh_ePAT@c$', s):
+                flow_dir = os.path.join(input_dir, s)
+            elif re.match('flow_250_tp_AoV_bh_ePAT@c_MAG$', s):
+                flow_mag_dir = os.path.join(input_dir, s)
+            elif re.match('flow_250_tp_AoV_bh_ePAT@c_P$', s):
+                flow_pha_dir = os.path.join(input_dir, s)
+            elif re.match('ShMOLLI_192i_SAX_b2s$', s):
+                shmolli_dir = os.path.join(input_dir, s)
+            elif re.match('ShMOLLI_192i_SAX_b2s_SAX_b2s_FITPARAMS$', s):
+                shmolli_fitpar_dir = os.path.join(input_dir, s)
+            elif re.match('ShMOLLI_192i_SAX_b2s_SAX_b2s_SAX_b2s_T1MAP$', s):
+                shmolli_t1map_dir = os.path.join(input_dir, s)
             m = re.match('cine_tagging_3sl_SAX_b(\d*)s$', s)
             if m:
                 tag_dir += [(os.path.join(input_dir, s), int(m.group(1)))]
@@ -160,6 +181,20 @@ class Biobank_Dataset(object):
             self.subdir['la_4ch'] = [lax_4ch_dir]
         if ao_dir:
             self.subdir['ao'] = [ao_dir]
+        if lvot_dir:
+            self.subdir['lvot'] = [lvot_dir]
+        if flow_dir:
+            self.subdir['flow'] = [flow_dir]
+        if flow_mag_dir:
+            self.subdir['flow_mag'] = [flow_mag_dir]
+        if flow_pha_dir:
+            self.subdir['flow_pha'] = [flow_pha_dir]
+        if shmolli_dir:
+            self.subdir['shmolli'] = [shmolli_dir]
+        if shmolli_fitpar_dir:
+            self.subdir['shmolli_fitpar'] = [shmolli_fitpar_dir]
+        if shmolli_t1map_dir:
+            self.subdir['shmolli_t1map'] = [shmolli_t1map_dir]
         if tag_dir:
             tag_dir = sorted(tag_dir, key=lambda x: x[1])
             for x, y in tag_dir:
@@ -322,7 +357,7 @@ class Biobank_Dataset(object):
                         print('Warning: dicom file missing for {0}: time point {1}. '
                               'Image will be copied from the previous time point.'.format(dir[z], t))
                         volume[:, :, z, t] = volume[:, :, z, t - 1]
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError, AttributeError):
                         print('Warning: failed to read pixel_array from file {0}. '
                               'Image will be copied from the previous time point.'.format(os.path.join(dir[z], f)))
                         volume[:, :, z, t] = volume[:, :, z, t - 1]

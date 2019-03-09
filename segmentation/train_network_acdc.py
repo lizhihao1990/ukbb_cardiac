@@ -47,7 +47,7 @@ tf.app.flags.DEFINE_string('log_dir', '/vol/bitbucket/wbai/ukbb_cardiac/ACDC_201
                            'Directory for saving the log file.')
 tf.app.flags.DEFINE_string('checkpoint_dir', '/vol/bitbucket/wbai/ukbb_cardiac/ACDC_2017/model',
                            'Directory for saving the trained model.')
-tf.app.flags.DEFINE_string('init_model_path', '/vol/bitbucket/wbai/ukbb_cardiac/model/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001.ckpt-50000',
+tf.app.flags.DEFINE_string('init_model_path', '/vol/biomedic2/wbai/ukbb_cardiac/UKBB_2964/model/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001/FCN_sa_level5_filter16_22333_Adam_batch2_iter50000_lr0.001.ckpt-50000',
                            'Initial model path.')
 tf.app.flags.DEFINE_boolean('z_score', False, 'Normalise the image intensity to z-score. '
                                               'Otherwise, rescale the intensity.')
@@ -347,9 +347,6 @@ def main(argv=None):
         train_writer.close()
         validation_writer.close()
         print('Training took {:.3f}s in total.\n'.format(time.time() - start_time))
-
-        # TODO
-        input("Press Enter to continue...")
 
 
 if __name__ == '__main__':
